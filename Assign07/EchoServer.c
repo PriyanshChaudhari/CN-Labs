@@ -1,58 +1,53 @@
-#include <stdio.h> // perror, printf
-#include <stdlib.h> // exit, atoi
-#include <unistd.h> // read, write, close
-#include <arpa/inet.h> // sockaddr_in, AF_INET, SOCK_STREAM, INADDR_ANY, socket etc...
-#include <string.h> // memset
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 
-int main(int argc, char const *argv[]) {
+#define PORT 8888
+#define MAX_MSG_SIZE 1024
 
-    int serverFd, clientFd;
-    struct sockaddr_in server, client;
-    int len;
-    int port = 1234;
-    char buffer[1024];
-    if (argc == 2) {
-        port = atoi(argv[1]);
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+    char buffer[MAX_MSG_SIZE] = {0};
+    
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("socket failed");
+        exit(EXIT_FAILURE);
     }
-    serverFd = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverFd < 0) {
-        perror("Cannot create socket");
-        exit(1);
+    
+    // Forcefully attaching socket to the port
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
     }
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(port);
-    len = sizeof(server);
-    if (bind(serverFd, (struct sockaddr *)&server, len) < 0) {
-        perror("Cannot bind sokcet");
-        exit(2);
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+    
+    // Forcefully attaching socket to the port
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
     }
-    if (listen(serverFd, 10) < 0) {
-        perror("Listen error");
-        exit(3);
+    if (listen(server_fd, 3) < 0) {
+        perror("listen");
+        exit(EXIT_FAILURE);
     }
-    while (1) {
-        len = sizeof(client);
-        printf("waiting for clients\n");
-        if ((clientFd = accept(serverFd, (struct sockaddr *)&client, &len)) < 0) {
-            perror("accept error");
-            exit(4);
-        }
-        char *client_ip = inet_ntoa(client.sin_addr);
-        printf("Accepted new connection from a client %s:%d\n", client_ip, ntohs(client.sin_port));
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0) {
+        perror("accept");
+        exit(EXIT_FAILURE);
+    }
+    while(1) {
         memset(buffer, 0, sizeof(buffer));
-        int size = read(clientFd, buffer, sizeof(buffer));
-        if ( size < 0 ) {
-            perror("read error");
-            exit(5);
-        }
-        printf("received %s from client\n", buffer);
-        if (write(clientFd, buffer, size) < 0) {
-            perror("write error");
-            exit(6);
-        }
-        close(clientFd);
+        read(new_socket , buffer, MAX_MSG_SIZE);
+        printf("Received: %s\n",buffer );
+        send(new_socket , buffer , strlen(buffer) , 0 );
+        printf("Message sent\n");
     }
-    close(serverFd);
     return 0;
 }
